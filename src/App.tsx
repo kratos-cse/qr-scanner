@@ -158,7 +158,7 @@ export default function App() {
           {eventName || "Event comes from the QR"} · {checkpointName || "No checkpoint"}
         </p>
         {checkpoints.length === 0 && (
-          <p className="meta">No checkpoints yet. Create them in Admin → Attendance.</p>
+          <p className="meta">No common checkpoint yet. Create one in Admin → Attendance. It applies to every event.</p>
         )}
       </section>
 

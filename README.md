@@ -32,6 +32,6 @@ Browsers only allow the camera on `localhost` or HTTPS. A hosted scanner needs H
 
 ## Check-in
 
-Pick a checkpoint (it is labeled with its event), then scan a participant QR. The QR decides which event and person are checked in. A QR for a different event than the checkpoint is rejected. Create checkpoints in the admin Attendance page, not in this app. A team QR shows that team’s roster. Each checkbox checks in one member through `POST /api/v1/scanner/member-checkin`. Checked boxes cannot be cleared. The backend decides duplicates and eligibility.
+Pick a common checkpoint, then scan any event's participant QR. The QR decides the event and the person. Create that checkpoint once in the admin Attendance page. It is not tied to a single event. A team QR shows that team’s roster. Each checkbox checks in one member through `POST /api/v1/scanner/member-checkin`. Checked boxes cannot be cleared. The backend decides duplicates and eligibility.
 
 Anyone who has a valid team QR can check in other members of that same team at that checkpoint while the short-lived capability is valid. It does not grant access to other teams or admin APIs.
