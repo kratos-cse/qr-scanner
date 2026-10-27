@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   checkInMember,
   fetchCheckpoints,
-  fetchEvents,
   submitScan,
   type RosterMember,
   type ScanPayload,
   type ScannerCheckpoint,
-  type ScannerEvent,
 } from "./api";
 import { startQrCamera, type CameraHandle } from "./camera";
 import RosterTable from "./RosterTable";
@@ -26,14 +24,12 @@ export default function App() {
   const lastToken = useRef<string | null>(null);
   const scanningLock = useRef(false);
 
-  const [events, setEvents] = useState<ScannerEvent[]>([]);
   const [checkpoints, setCheckpoints] = useState<ScannerCheckpoint[]>([]);
-  const [eventId, setEventId] = useState("");
   const [checkpointId, setCheckpointId] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualToken, setManualToken] = useState("");
-  const [statusText, setStatusText] = useState("Select an event and checkpoint.");
+  const [statusText, setStatusText] = useState("Select a checkpoint, then scan.");
   const [scan, setScan] = useState<ScanPayload | null>(null);
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [capability, setCapability] = useState<string | null>(null);
@@ -41,19 +37,10 @@ export default function App() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    void fetchEvents()
-      .then(setEvents)
-      .catch(() => setActionError("Could not load events. Check that the backend is running."));
-  }, []);
-
-  useEffect(() => {
-    setCheckpointId("");
-    setCheckpoints([]);
-    if (!eventId) return;
-    void fetchCheckpoints(eventId)
+    void fetchCheckpoints()
       .then(setCheckpoints)
-      .catch(() => setActionError("Could not load checkpoints for this event."));
-  }, [eventId]);
+      .catch(() => setActionError("Could not load checkpoints. Create them in the admin Attendance page."));
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -144,8 +131,9 @@ export default function App() {
 
   const team = scan?.team;
   const checkedCount = roster.filter((m) => m.checked_in).length;
-  const eventName = events.find((e) => e.id === eventId)?.name;
-  const checkpointName = checkpoints.find((c) => c.id === checkpointId)?.name;
+  const selected = checkpoints.find((c) => c.id === checkpointId);
+  const eventName = selected?.event_name;
+  const checkpointName = selected?.name;
 
   return (
     <main className="app">
@@ -156,30 +144,22 @@ export default function App() {
 
       <section className="panel">
         <label className="field">
-          Event
-          <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
-            <option value="">Select an event</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>{event.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
           Checkpoint
-          <select
-            value={checkpointId}
-            onChange={(e) => setCheckpointId(e.target.value)}
-            disabled={!eventId}
-          >
+          <select value={checkpointId} onChange={(e) => setCheckpointId(e.target.value)}>
             <option value="">Select a checkpoint</option>
             {checkpoints.map((cp) => (
-              <option key={cp.id} value={cp.id}>{cp.name}</option>
+              <option key={cp.id} value={cp.id}>
+                {cp.event_name ? `${cp.event_name} — ${cp.name}` : cp.name}
+              </option>
             ))}
           </select>
         </label>
         <p className="meta">
-          {eventName || "No event"} · {checkpointName || "No checkpoint"}
+          {eventName || "Event comes from the QR"} · {checkpointName || "No checkpoint"}
         </p>
+        {checkpoints.length === 0 && (
+          <p className="meta">No checkpoints yet. Create them in Admin → Attendance.</p>
+        )}
       </section>
 
       <section className="panel">

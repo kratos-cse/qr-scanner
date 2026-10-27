@@ -1,5 +1,11 @@
 export type ScannerEvent = { id: string; name: string };
-export type ScannerCheckpoint = { id: string; name: string; location?: string | null };
+export type ScannerCheckpoint = {
+  id: string;
+  name: string;
+  location?: string | null;
+  event_id?: string;
+  event_name?: string;
+};
 
 export type RosterMember = {
   team_member_id: string;
@@ -58,8 +64,8 @@ export async function fetchEvents(): Promise<ScannerEvent[]> {
   return parse(res);
 }
 
-export async function fetchCheckpoints(eventId: string): Promise<ScannerCheckpoint[]> {
-  const res = await fetch(`${base()}/scanner/checkpoints?event_id=${encodeURIComponent(eventId)}`);
+export async function fetchCheckpoints(): Promise<ScannerCheckpoint[]> {
+  const res = await fetch(`${base()}/scanner/checkpoints`);
   return parse(res);
 }
 
