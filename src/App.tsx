@@ -10,6 +10,7 @@ import {
 import { startQrCamera, type CameraHandle } from "./camera";
 import RosterTable from "./RosterTable";
 import { shouldSubmitToken } from "./throttle";
+import { extractScanToken } from "./token";
 
 function resultClass(payload: ScanPayload | null): string {
   if (!payload) return "";
@@ -56,7 +57,7 @@ export default function App() {
   }
 
   async function runScan(raw: string) {
-    const token = raw.trim();
+    const token = extractScanToken(raw);
     if (!checkpointId || !shouldSubmitToken(token, lastToken.current, scanningLock.current)) return;
     scanningLock.current = true;
     lastToken.current = token;
