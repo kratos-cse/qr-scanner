@@ -8,21 +8,23 @@ const members = [
 ];
 
 describe("RosterTable", () => {
-  it("checks in only the clicked member and does not uncheck present rows", () => {
-    const onCheckIn = vi.fn();
-    render(<RosterTable members={members} pendingId={null} onCheckIn={onCheckIn} />);
-    const boxes = screen.getAllByRole("checkbox");
-    expect((boxes[0] as HTMLInputElement).disabled).toBe(true);
+  it("toggles present and absent members independently", () => {
+    const onToggle = vi.fn();
+    render(<RosterTable members={members} pendingId={null} onToggle={onToggle} />);
+    const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    expect(boxes[0].disabled).toBe(false);
     fireEvent.click(boxes[0]);
-    expect(onCheckIn).not.toHaveBeenCalled();
+    expect(onToggle).toHaveBeenCalledWith(members[0], false);
     fireEvent.click(boxes[1]);
-    expect(onCheckIn).toHaveBeenCalledTimes(1);
-    expect(onCheckIn.mock.calls[0][0].name).toBe("Bea");
+    expect(onToggle).toHaveBeenCalledWith(members[1], true);
     expect(screen.queryByText(/phone|email|payment/i)).toBeNull();
   });
 
-  it("shows a pending label", () => {
-    render(<RosterTable members={members} pendingId="2" onCheckIn={() => undefined} />);
+  it("shows a pending label and disables edits", () => {
+    render(<RosterTable members={members} pendingId="2" onToggle={() => undefined} />);
     expect(screen.getByText("Saving…")).toBeTruthy();
+    const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    expect(boxes[0].disabled).toBe(true);
+    expect(boxes[1].disabled).toBe(true);
   });
 });

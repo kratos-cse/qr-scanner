@@ -78,11 +78,19 @@ export async function submitScan(token: string, checkpointId: string): Promise<S
   return parse(res);
 }
 
-export async function checkInMember(capability: string, teamMemberId: string): Promise<MemberCheckInPayload> {
-  const res = await fetch(`${base()}/scanner/member-checkin`, {
+export async function setMemberAttendance(
+  capability: string,
+  teamMemberId: string,
+  checkedIn: boolean,
+): Promise<MemberCheckInPayload> {
+  const res = await fetch(`${base()}/scanner/member-attendance`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ capability, team_member_id: teamMemberId }),
+    body: JSON.stringify({
+      capability,
+      team_member_id: teamMemberId,
+      checked_in: checkedIn,
+    }),
   });
   return parse(res);
 }

@@ -1,29 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  checkInMember,
   fetchCheckpoints,
+  setMemberAttendance,
   submitScan,
   type RosterMember,
   type ScanPayload,
   type ScannerCheckpoint,
 } from "./api";
 import { startQrCamera, type CameraHandle } from "./camera";
-import RosterTable from "./RosterTable";
+import ScanResultModal from "./ScanResultModal";
 import { shouldSubmitToken } from "./throttle";
 import { extractScanToken } from "./token";
-
-function resultClass(payload: ScanPayload | null): string {
-  if (!payload) return "";
-  if (payload.recorded) return "ok";
-  if (payload.duplicate) return "warn";
-  return "bad";
-}
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraHandle | null>(null);
   const lastToken = useRef<string | null>(null);
   const scanningLock = useRef(false);
+  const popupOpen = useRef(false);
 
   const [checkpoints, setCheckpoints] = useState<ScannerCheckpoint[]>([]);
   const [checkpointId, setCheckpointId] = useState("");
@@ -40,7 +34,7 @@ export default function App() {
   useEffect(() => {
     void fetchCheckpoints()
       .then(setCheckpoints)
-      .catch(() => setActionError("Could not load checkpoints. Create them in the admin Attendance page."));
+      .catch(() => setActionError("Could not load checkpoints. Create a common checkpoint in Admin → Attendance."));
   }, []);
 
   useEffect(() => {
@@ -48,6 +42,27 @@ export default function App() {
       cameraRef.current?.stop();
     };
   }, []);
+
+  useEffect(() => {
+    popupOpen.current = scan !== null;
+  }, [scan]);
+
+  function stopCamera() {
+    cameraRef.current?.stop();
+    cameraRef.current = null;
+    setCameraOn(false);
+  }
+
+  function selectCheckpoint(nextId: string) {
+    stopCamera();
+    lastToken.current = null;
+    setScan(null);
+    setRoster([]);
+    setCapability(null);
+    setPendingId(null);
+    setCheckpointId(nextId);
+    setStatusText(nextId ? "Checkpoint ready. Start scanning." : "Select a checkpoint, then scan.");
+  }
 
   function applyScan(payload: ScanPayload) {
     setScan(payload);
@@ -58,18 +73,15 @@ export default function App() {
 
   async function runScan(raw: string) {
     const token = extractScanToken(raw);
-    if (!checkpointId || !shouldSubmitToken(token, lastToken.current, scanningLock.current)) return;
+    if (!checkpointId || popupOpen.current) return;
+    if (!shouldSubmitToken(token, lastToken.current, scanningLock.current)) return;
     scanningLock.current = true;
     lastToken.current = token;
     setActionError(null);
     try {
-      const payload = await submitScan(token, checkpointId);
-      applyScan(payload);
+      applyScan(await submitScan(token, checkpointId));
     } catch (err) {
       lastToken.current = null;
-      setScan(null);
-      setRoster([]);
-      setCapability(null);
       setStatusText("Scan failed");
       setActionError(err instanceof Error ? err.message : "Network error.");
     } finally {
@@ -92,80 +104,74 @@ export default function App() {
     }
   }
 
-  function stopCamera() {
-    cameraRef.current?.stop();
-    cameraRef.current = null;
-    setCameraOn(false);
-  }
-
-  function scanAgain() {
+  function closePopup() {
+    if (pendingId) return;
     lastToken.current = null;
     setScan(null);
     setActionError(null);
-    setStatusText(checkpointId ? "Ready for the next QR." : "Select a checkpoint.");
+    setStatusText("Ready for the next QR.");
   }
 
-  async function onCheckIn(member: RosterMember) {
-    if (!capability || member.checked_in) return;
+  async function onToggle(member: RosterMember, checkedIn: boolean) {
+    if (!capability || pendingId) return;
+    if (!checkedIn && !window.confirm("Mark this member absent? This records an attendance correction.")) return;
     const previous = roster;
     setPendingId(member.team_member_id);
     setActionError(null);
     try {
-      const result = await checkInMember(capability, member.team_member_id);
-      if (!result.checked_in) {
+      const result = await setMemberAttendance(capability, member.team_member_id, checkedIn);
+      if (result.checked_in !== checkedIn) {
         setRoster(previous);
         setActionError(result.message);
         return;
       }
       setRoster((rows) =>
         rows.map((row) =>
-          row.team_member_id === member.team_member_id ? { ...row, checked_in: true } : row,
+          row.team_member_id === member.team_member_id ? { ...row, checked_in: result.checked_in } : row,
         ),
       );
     } catch (err) {
       setRoster(previous);
-      setActionError(err instanceof Error ? err.message : "Could not record attendance.");
+      setActionError(err instanceof Error ? err.message : "Could not update attendance.");
     } finally {
       setPendingId(null);
     }
   }
 
-  const team = scan?.team;
-  const checkedCount = roster.filter((m) => m.checked_in).length;
-  const selected = checkpoints.find((c) => c.id === checkpointId);
-  const eventName = selected?.event_name;
-  const checkpointName = selected?.name;
+  const selected = checkpoints.find((checkpoint) => checkpoint.id === checkpointId);
 
   return (
     <main className="app">
-      <header>
-        <h1>KRATOS ’26 check-in</h1>
-        <p>{statusText}</p>
+      <header className="top">
+        <div>
+          <p className="eyebrow">Kratos ’26</p>
+          <h1>Check-in</h1>
+        </div>
+        <p className="status-pill">{cameraOn ? "Camera on" : statusText}</p>
       </header>
 
       <section className="panel">
         <label className="field">
-          Checkpoint
-          <select value={checkpointId} onChange={(e) => setCheckpointId(e.target.value)}>
+          Step 1 · Checkpoint
+          <select value={checkpointId} onChange={(event) => selectCheckpoint(event.target.value)}>
             <option value="">Select a checkpoint</option>
-            {checkpoints.map((cp) => (
-              <option key={cp.id} value={cp.id}>
-                {cp.event_name ? `${cp.event_name} — ${cp.name}` : cp.name}
-              </option>
+            {checkpoints.map((checkpoint) => (
+              <option key={checkpoint.id} value={checkpoint.id}>{checkpoint.name}</option>
             ))}
           </select>
         </label>
         <p className="meta">
-          {eventName || "Event comes from the QR"} · {checkpointName || "No checkpoint"}
+          {selected ? `${selected.name}${selected.location ? ` · ${selected.location}` : ""}` : "A checkpoint is required before scanning."}
         </p>
         {checkpoints.length === 0 && (
           <p className="meta">No common checkpoint yet. Create one in Admin → Attendance. It applies to every event.</p>
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel stage">
+        <p className="meta">Step 2 · Scanner · {selected?.name || "No checkpoint"}</p>
         <video ref={videoRef} muted playsInline />
-        <div className="actions" style={{ marginTop: 12 }}>
+        <div className="actions">
           {!cameraOn ? (
             <button type="button" onClick={() => void startCamera()} disabled={!checkpointId}>
               Start scanning
@@ -173,18 +179,17 @@ export default function App() {
           ) : (
             <button type="button" className="secondary" onClick={stopCamera}>Stop scanning</button>
           )}
-          <button type="button" className="secondary" onClick={scanAgain} disabled={!checkpointId}>
-            Scan next
-          </button>
         </div>
         {cameraError && <p className="result bad">{cameraError}</p>}
+        {actionError && !scan && <p className="result bad">{actionError}</p>}
         <label className="field" style={{ marginTop: 14 }}>
-          Manual QR token
+          Manual token
           <input
             type="text"
             value={manualToken}
-            onChange={(e) => setManualToken(e.target.value)}
+            onChange={(event) => setManualToken(event.target.value)}
             placeholder="Paste the token if the camera is unavailable"
+            disabled={!checkpointId}
           />
         </label>
         <button type="button" disabled={!checkpointId || !manualToken.trim()} onClick={() => void runScan(manualToken)}>
@@ -192,24 +197,15 @@ export default function App() {
         </button>
       </section>
 
-      {actionError && <p className="result bad">{actionError}</p>}
-
       {scan && (
-        <section className="panel">
-          <p className={`result ${resultClass(scan)}`}>{scan.message}</p>
-          <p className="meta">{scan.event_name || eventName} · {scan.checkpoint_name || checkpointName}</p>
-          {!team && scan.participant_name ? <p><strong>{scan.participant_name}</strong></p> : null}
-          {team ? (
-            <>
-              <p><strong>Team:</strong> {team.team_name || "—"}</p>
-              <p><strong>College:</strong> {team.college_name || "—"}</p>
-              <p><strong>Event:</strong> {team.event_name}</p>
-              <p><strong>Checkpoint:</strong> {team.checkpoint_name}</p>
-              <p>{checkedCount} of {roster.length} members checked in</p>
-              <RosterTable members={roster} pendingId={pendingId} onCheckIn={(member) => void onCheckIn(member)} />
-            </>
-          ) : null}
-        </section>
+        <ScanResultModal
+          scan={scan}
+          roster={roster}
+          pendingId={pendingId}
+          error={actionError}
+          onToggle={(member, checkedIn) => void onToggle(member, checkedIn)}
+          onClose={closePopup}
+        />
       )}
     </main>
   );

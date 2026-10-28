@@ -3,10 +3,10 @@ import type { RosterMember } from "./api";
 type Props = {
   members: RosterMember[];
   pendingId: string | null;
-  onCheckIn: (member: RosterMember) => void;
+  onToggle: (member: RosterMember, checkedIn: boolean) => void;
 };
 
-export default function RosterTable({ members, pendingId, onCheckIn }: Props) {
+export default function RosterTable({ members, pendingId, onToggle }: Props) {
   return (
     <table className="roster">
       <thead>
@@ -19,7 +19,6 @@ export default function RosterTable({ members, pendingId, onCheckIn }: Props) {
       <tbody>
         {members.map((member) => {
           const pending = pendingId === member.team_member_id;
-          const checked = member.checked_in;
           return (
             <tr key={member.team_member_id}>
               <td>{member.name}</td>
@@ -28,13 +27,11 @@ export default function RosterTable({ members, pendingId, onCheckIn }: Props) {
                 <label className="check">
                   <input
                     type="checkbox"
-                    checked={checked}
-                    disabled={checked || pendingId !== null}
-                    onChange={() => {
-                      if (!checked) onCheckIn(member);
-                    }}
+                    checked={member.checked_in}
+                    disabled={pendingId !== null}
+                    onChange={(event) => onToggle(member, event.target.checked)}
                   />
-                  <span>{pending ? "Saving…" : checked ? "Present" : "Mark present"}</span>
+                  <span>{pending ? "Saving…" : member.checked_in ? "Present" : "Absent"}</span>
                 </label>
               </td>
             </tr>
